@@ -7,7 +7,7 @@ def calculate_metrics(groups):
     group_add = pd.read_csv("group_add.csv", sep=",")
     group_add = group_add.rename(columns = {group_add.columns[0]:'id', group_add.columns[1]: 'grp'})
     groups_all = pd.concat([groups, group_add], ignore_index=True)
-    groups_all.to_csv('groups.csv') #сохраняем новые данные в файл для будущих добавлений
+    groups_all.to_csv('groups.csv')
     
     df = pd.merge(groups_all, active_studs, 
                   left_on='id', right_on='student_id', how='inner')
