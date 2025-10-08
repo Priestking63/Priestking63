@@ -65,7 +65,3 @@
 ![Languages](https://github-readme-stats.vercel.app/api/top-langs/?username=Priestking63&layout=compact)
 
 ---
-
-### Активность
-
-![GitHub Streak](https://github-readme-streak-stats.herokuapp.com/?user=Priestking63&theme=default)
