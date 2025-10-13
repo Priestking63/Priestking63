@@ -1,27 +1,37 @@
-import asyncio
-import logging
+import csv
 import os
 import sys
 import re
-from typing import Optional
-from telethon import TelegramClient, events
+from datetime import datetime
+from telethon import TelegramClient
+import logging
+import asyncio
 from telethon.tl.types import MessageService
+import re
+import html
+from urllib.parse import unquote
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.insert(0, parent_dir)
+logger = logging.getLogger(__name__)
+
 
 from sqltg.database import init_db, save_message
-from emb.transform import TextEmbedder
-from config import Config
+from transform import TextEmbedder
 
-Config.validate()
 
+api_id = 23801227
+api_hash = "53c7949eaea365a820ec814c2971f87c"
 channels = [
     "https://t.me/skidki_nnov_me08",
     "https://t.me/skidki_iz_pitera",
-    "https://t.me/myfavoritejumoreski",
-    "https://t.me/dvachannel"
+    "https://t.me/plohie_skidki",
+    "https://t.me/besfree",
+    "https://t.me/dealfinder",
+    "https://t.me/+xypZbUFHvp84NDQ6",
+    "https://t.me/poblat",
+    "https://t.me/sliv_halyavy",
 ]
 
 logging.basicConfig(
@@ -30,74 +40,148 @@ logging.basicConfig(
     handlers=[logging.StreamHandler()],
 )
 
-logger = logging.getLogger(__name__)
+
+def clean_text(text):
+    if text is None:
+        return ""
+
+    # Декодируем HTML entities (например, &amp; -> &)
+    text = html.unescape(text)
+
+    # Декодируем URL-encoded строки
+    text = unquote(text)
+    
+    # Удаляем email адреса
+    text = re.sub(r"\S+@\S+", "", text)
+
+    # Удаляем HTML теги
+    text = re.sub(r"<[^>]+>", "", text)
+
+    # Удаляем Markdown разметку
+    text = re.sub(r"[*_~`#\[\]()]", "", text)  # Удаляем * _ ~ ` # [ ] ( )
+    text = re.sub(r"!\[.*?\]\(.*?\)", "", text)  # Удаляем Markdown изображения
+    text = re.sub(r"\[.*?\]\(.*?\)", "", text)  # Удаляем Markdown ссылки
+
+    # Удаляем эмодзи и специальные символы
+    # Базовые эмодзи (Unicode блоки)
+    text = re.sub(r"[\U0001F600-\U0001F64F]", "", text)  # Emoticons
+    text = re.sub(r"[\U0001F300-\U0001F5FF]", "", text)  # Symbols & Pictographs
+    text = re.sub(r"[\U0001F680-\U0001F6FF]", "", text)  # Transport & Map
+    text = re.sub(r"[\U0001F1E0-\U0001F1FF]", "", text)  # Flags
+    text = re.sub(r"[\U00002700-\U000027BF]", "", text)  # Dingbats
+
+    # Удаляем другие специальные символы
+    text = re.sub(r"[♥♦♣♠•◘○◙♂♀♪♫☼►◄↕‼¶§▬↨↑↓→←∟↔▲▼]", "", text)
+
+    # Удаляем повторяющиеся знаки препинания
+    text = re.sub(r"([!?.,])\1+", r"\1", text)  # !!! -> !, ??? -> ?
+
+    # Удаляем лишние дефисы/тире
+    text = re.sub(r"[-—]{2,}", " ", text)
+
+    # Оставляем только разрешенные символы (расширенный набор)
+    text = re.sub(
+        r"[^\w\s\.\,\!\?\:\;\-\+\(\)\"\'\@\%\=\/\\\&\#\<\>]", "", text
+    )
+
+    # Обработка для цен и чисел
+    text = re.sub(r"(\d)[\s]*%", r"\1%", text)  # Убираем пробелы перед %
+    text = re.sub(
+        r"(\d)[\s]*-[\s]*(\d)", r"\1-\2", text
+    )  # Убираем пробелы вокруг дефиса в числах
+
+    # Удаляем лишние пробелы
+    text = re.sub(r"\s+", " ", text)
+
+    # Удаляем пробелы в начале и конце строки
+    text = text.strip()
+
+    return text
 
 
-class OnlineParser:
-    def __init__(self):
-        self.client: Optional[TelegramClient] = None  
-        self.embedder = TextEmbedder()
-        self.channel_dict = {}
+async def parser_tgchanels(client, channels, limit=500):  
+    """Парсит каналы и сохраняет в базу данных"""
+    logger.info("Инициализация базы данных...")
+    init_db()
 
-    def clean_text(self, text: str) -> str:
-        """Очищает текст от лишних символов"""
-        if text is None:
-            return ""
-        text = re.sub(r"[^\w\s\.\,\!\?\:\;\-\+\(\)\[\]\{\}\"\'\@\$\%\=\/\\]", "", text)
-        text = re.sub(r"\s+", " ", text)
-        return text.strip()
+    processed_messages = set()
 
-    async def start_parser(self) -> TelegramClient:
-        """Запуск парсера в реальном времени"""
-        init_db()
+    embedder = TextEmbedder()
 
-        self.client = TelegramClient("online_session", Config.API_ID, Config.API_HASH)
+    total_messages = 0
+    skipped_messages = 0
 
-        await self.client.start()
+    for channel in channels:
+        logger.info(f"Парсинг канала {channel}")
+        try:
+            all_mes = await client.get_messages(channel, limit=limit)
+            channel_message_count = 0
 
-        for channel_url in channels:
-            try:
-                entity = await self.client.get_entity(channel_url)
-                self.channel_dict[entity.id] = channel_url
-                logger.info(f"Канал {channel_url} имеет ID {entity.id}")
-            except Exception as e:
-                logger.error(f"Ошибка получения entity для {channel_url}: {e}")
+            for message in all_mes:
+                if isinstance(message, MessageService):
+                    skipped_messages += 1
+                    continue
 
-        @self.client.on(events.NewMessage(chats=list(self.channel_dict.keys())))
-        async def handler(event):
-            message = event.message
-            if isinstance(message, MessageService):
-                return
+                if not message.text or len(message.text.strip()) <= 5:
+                    skipped_messages += 1
+                    continue
 
-            text = message.text
-            if not text or len(text.strip()) <= 5:
-                return
+                message_uid = f"{channel}_{message.id}"
 
-            cleaned_text = self.clean_text(text)
+                if message_uid in processed_messages:
+                    continue
 
-            try:
-                embedding = self.embedder.get_embeddings(cleaned_text)
-                channel_url = self.channel_dict[event.chat_id]
+                try:
+                    cleaned_text = clean_text(message.text)
+                    if len(cleaned_text) < 10:
+                        continue
 
-                if save_message(
-                    message_id=message.id,
-                    channel=channel_url,
-                    date=str(message.date),
-                    text=cleaned_text,
-                    embedding=embedding,
-                ):
-                    logger.info(f"Сохранено сообщение {message.id} из {channel_url}")
-                else:
-                    logger.warning(f"Не удалось сохранить сообщение {message.id}")
+                    embeddings = embedder.get_embeddings(cleaned_text)
+                    
+                    if save_message(
+                        message_id=message.id,
+                        channel=channel,
+                        date=str(message.date),
+                        text=cleaned_text,
+                        embedding= embeddings
 
-            except Exception as e:
-                logger.error(f"Ошибка обработки сообщения: {e}")
+                    ):
+                        processed_messages.add(message_uid)
+                        channel_message_count += 1
+                        total_messages += 1
+                        logger.info(f"Сохранено сообщение {message.id}")
+                    else:
+                        logger.warning(f"Не удалось сохранить сообщение {message_uid}")
 
-        logger.info("Парсер запущен и слушает сообщения в реальном времени...")
-        return self.client
+                except Exception as e:
+                    logger.error(
+                        f"Ошибка при обработке сообщения {message_uid}: {str(e)}",
+                        exc_info=True,
+                    )
 
-    async def stop_parser(self):
-        """Остановка парсера"""
-        if self.client:
-            await self.client.disconnect()
-            self.client = None
+            logger.info(f"Успешно обработано {channel_message_count} сообщений")
+
+        except Exception as e:
+            logger.error(
+                f"Ошибка при парсинге канала {channel}: {str(e)}", exc_info=True
+            )
+
+    logger.info(f"Всего обработано сообщений: {total_messages}")
+    logger.info(f"Пропущено сообщений: {skipped_messages}")
+
+
+async def main():
+    try:
+        logger.info("Запуск парсера...")
+        async with TelegramClient(
+            "my", api_id, api_hash, system_version="4.10.5 beta x64"
+        ) as client:
+            logger.info("Клиент Telegram успешно создан")
+            await parser_tgchanels(client, channels)
+        logger.info("Парсинг завершен")
+    except Exception as e:
+        logger.error(f"Ошибка в main: {str(e)}", exc_info=True)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
