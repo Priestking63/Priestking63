@@ -25,7 +25,6 @@ api_id = 23801227
 api_hash = "53c7949eaea365a820ec814c2971f87c"
 channels = [
     "https://t.me/skidki_nnov_me08",
-    "https://t.me/skidki_iz_pitera",
     "https://t.me/plohie_skidki",
     "https://t.me/besfree",
     "https://t.me/dealfinder",
@@ -45,55 +44,32 @@ def clean_text(text):
     if text is None:
         return ""
 
-    # Декодируем HTML entities (например, &amp; -> &)
     text = html.unescape(text)
-
-    # Декодируем URL-encoded строки
     text = unquote(text)
-    
-    # Удаляем email адреса
     text = re.sub(r"\S+@\S+", "", text)
-
-    # Удаляем HTML теги
     text = re.sub(r"<[^>]+>", "", text)
-
-    # Удаляем Markdown разметку
-    text = re.sub(r"[*_~`#\[\]()]", "", text)  # Удаляем * _ ~ ` # [ ] ( )
-    text = re.sub(r"!\[.*?\]\(.*?\)", "", text)  # Удаляем Markdown изображения
-    text = re.sub(r"\[.*?\]\(.*?\)", "", text)  # Удаляем Markdown ссылки
-
-    # Удаляем эмодзи и специальные символы
-    # Базовые эмодзи (Unicode блоки)
-    text = re.sub(r"[\U0001F600-\U0001F64F]", "", text)  # Emoticons
-    text = re.sub(r"[\U0001F300-\U0001F5FF]", "", text)  # Symbols & Pictographs
-    text = re.sub(r"[\U0001F680-\U0001F6FF]", "", text)  # Transport & Map
-    text = re.sub(r"[\U0001F1E0-\U0001F1FF]", "", text)  # Flags
-    text = re.sub(r"[\U00002700-\U000027BF]", "", text)  # Dingbats
-
-    # Удаляем другие специальные символы
+    text = re.sub(r"[*_~`#\[\]()]", "", text)  
+    text = re.sub(r"!\[.*?\]\(.*?\)", "", text)  
+    text = re.sub(r"\[.*?\]\(.*?\)", "", text)  
+    text = re.sub(r"[\U0001F600-\U0001F64F]", "", text) 
+    text = re.sub(r"[\U0001F300-\U0001F5FF]", "", text)  
+    text = re.sub(r"[\U0001F680-\U0001F6FF]", "", text) 
+    text = re.sub(r"[\U0001F1E0-\U0001F1FF]", "", text) 
+    text = re.sub(r"[\U00002700-\U000027BF]", "", text)  
     text = re.sub(r"[♥♦♣♠•◘○◙♂♀♪♫☼►◄↕‼¶§▬↨↑↓→←∟↔▲▼]", "", text)
-
-    # Удаляем повторяющиеся знаки препинания
     text = re.sub(r"([!?.,])\1+", r"\1", text)  # !!! -> !, ??? -> ?
-
-    # Удаляем лишние дефисы/тире
     text = re.sub(r"[-—]{2,}", " ", text)
-
-    # Оставляем только разрешенные символы (расширенный набор)
     text = re.sub(
         r"[^\w\s\.\,\!\?\:\;\-\+\(\)\"\'\@\%\=\/\\\&\#\<\>]", "", text
     )
 
-    # Обработка для цен и чисел
-    text = re.sub(r"(\d)[\s]*%", r"\1%", text)  # Убираем пробелы перед %
+    text = re.sub(r"(\d)[\s]*%", r"\1%", text) 
     text = re.sub(
         r"(\d)[\s]*-[\s]*(\d)", r"\1-\2", text
-    )  # Убираем пробелы вокруг дефиса в числах
+    ) 
 
-    # Удаляем лишние пробелы
     text = re.sub(r"\s+", " ", text)
 
-    # Удаляем пробелы в начале и конце строки
     text = text.strip()
 
     return text
@@ -133,7 +109,7 @@ async def parser_tgchanels(client, channels, limit=500):
 
                 try:
                     cleaned_text = clean_text(message.text)
-                    if len(cleaned_text) < 10:
+                    if len(cleaned_text) < 30:
                         continue
 
                     embeddings = embedder.get_embeddings(cleaned_text)

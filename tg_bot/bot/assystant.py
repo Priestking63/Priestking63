@@ -9,7 +9,7 @@ logging.basicConfig(level= logging.INFO)
 logger = logging.getLogger(__name__)
 
 class SmartTelegramAssistant():
-    def __init__(self, db = 'bot_base.db', similarity_threshold = 0.7):
+    def __init__(self, db = 'bot_base.db', similarity_threshold = 0.5):
         self.db_path = db
         self.threshold = similarity_threshold
 
