@@ -1,5 +1,5 @@
 # Михаил (Priestking63)
-Начинающий Data Scientist
+ Data Scientist
 
 ## Контакты
 - Telegram: @Pokonokon
